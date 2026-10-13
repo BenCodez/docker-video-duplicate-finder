@@ -20,9 +20,9 @@ trap 'exit 1' HUP INT TERM
 mkdir -p "$WORK_DIR/config" "$WORK_DIR/media"
 
 # The only media and configuration used here are generated fixtures.
-docker run --rm --platform "$PLATFORM" --entrypoint /bin/sh \
-    -v "$WORK_DIR/media:/storage" "$IMAGE" -c \
-    'ffmpeg -v error -f lavfi -i testsrc=size=160x90:rate=5 -t 2 -c:v ffv1 /storage/example-a.mkv && cp /storage/example-a.mkv /storage/example-b.mkv && printf "%s\n" "<movie><tag>Favorite</tag></movie>" > /storage/example-a.nfo'
+docker run --interactive --rm --platform "$PLATFORM" --entrypoint /bin/sh \
+    -v "$WORK_DIR/media:/storage" "$IMAGE" -s \
+    < "$(dirname "$0")/prepare-fixture.sh"
 python3 - "$WORK_DIR/config/Settings.json" "$WORK_DIR/config/ScannedFiles.db" <<'PY'
 from datetime import datetime, timedelta, timezone
 import json, struct, sys

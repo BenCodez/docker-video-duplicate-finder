@@ -194,7 +194,7 @@ Local checks used an isolated archive of the pinned application tree, never the
 application checkout or a user configuration. All nine patches applied with
 `--fuzz=0`; the actual patched `CoreUtils` compiled on SDK 10.0.401 and passed
 its default-path, explicit-database-override and full source-revision metadata
-probes. All 16 startup/release-policy/smoke-probe regressions and 25 patched-application
+probes. All 21 startup/release-policy/smoke-probe regressions and 25 patched-application
 settings, scheduling and protection-persistence tests passed. Shell syntax,
 whitespace and actionlint 1.7.12 validation passed.
 An additional 23 shared cleanup-guard and 44 Web cleanup-safety checks passed
@@ -218,6 +218,14 @@ CI execution, real GUI rendering,
 clipboard/file-manager interaction, authentication/TLS and AI model inference
 still require an available image/engine. These gates must be completed before
 calling an image production-ready.
+
+The first CI execution built both architectures, but each runtime smoke exited
+with signal 11/status 139 in the initial FFmpeg fixture before GUI startup.
+The fixture now prints loader inputs, resolved binaries/dependencies and tool
+versions with shell tracing. A failed encode collects debug logs and an existing
+debugger's backtrace when available, then returns the original failure status
+even if the diagnostic retry succeeds. That crash remains unresolved until a diagnostic image run
+identifies its cause and both complete runtime smokes pass.
 
 ## Attribution and corresponding source
 
