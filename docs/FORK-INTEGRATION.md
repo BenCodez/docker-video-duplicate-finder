@@ -194,7 +194,7 @@ Local checks used an isolated archive of the pinned application tree, never the
 application checkout or a user configuration. All nine patches applied with
 `--fuzz=0`; the actual patched `CoreUtils` compiled on SDK 10.0.401 and passed
 its default-path, explicit-database-override and full source-revision metadata
-probes. All 21 startup/release-policy/smoke-probe regressions and 25 patched-application
+probes. All 25 startup/release-policy/smoke-probe/ELF-stack regressions and 25 patched-application
 settings, scheduling and protection-persistence tests passed. Shell syntax,
 whitespace and actionlint 1.7.12 validation passed.
 An additional 23 shared cleanup-guard and 44 Web cleanup-safety checks passed
@@ -224,8 +224,15 @@ with signal 11/status 139 in the initial FFmpeg fixture before GUI startup.
 The fixture now prints loader inputs, resolved binaries/dependencies and tool
 versions with shell tracing. A failed encode collects debug logs and an existing
 debugger's backtrace when available, then returns the original failure status
-even if the diagnostic retry succeeds. That crash remains unresolved until a diagnostic image run
-identifies its cause and both complete runtime smokes pass.
+even if the diagnostic retry succeeds. Both diagnostic images passed tool
+versions and dependency resolution with empty loader overrides, then crashed
+after FFV1 encoder/thread startup. FFV1 has stack arrays larger than musl's
+128 KiB default native-thread stack. The build now requests 2 MiB through
+`PT_GNU_STACK` for all FFmpeg tools and shared libraries, retaining optimized
+code, and fails unless every installed ELF header has that reservation.
+Actual linked executable/shared-library regressions exercise the header gate.
+This is a stack-overflow hypothesis pending the next image run; the original
+encode and complete runtime smokes must pass before the crash is considered fixed.
 
 ## Attribution and corresponding source
 

@@ -113,6 +113,7 @@ COPY --from=ffmpeg /tmp/ffmpeg-install/usr/share/licenses /usr/share/licenses
 COPY LICENSE /usr/share/licenses/container/LICENSE
 COPY Dockerfile src/vdf/ /usr/share/vdf/container-build/
 COPY src/ffmpeg/build.sh /usr/share/vdf/container-build/ffmpeg-build.sh
+COPY src/ffmpeg/check-stack.sh /usr/share/vdf/container-build/check-stack.sh
 
 # Set internal environment variables.
 RUN \

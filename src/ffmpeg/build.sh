@@ -7,7 +7,9 @@ set -u # Treat unset variables as an error.
 export CFLAGS="-fomit-frame-pointer"
 export CXXFLAGS="$CFLAGS"
 export CPPFLAGS="$CFLAGS"
-export LDFLAGS="-fuse-ld=lld -Wl,--as-needed,-O1,--sort-common -Wl,--strip-all"
+# musl otherwise gives native worker threads only 128 KiB. FFV1 can use more
+# than that for one frame; set the default for both tools and loaded libraries.
+export LDFLAGS="-fuse-ld=lld -Wl,--as-needed,-O1,--sort-common -Wl,--strip-all -Wl,-z,stack-size=2097152"
 
 export CC=xx-clang
 export CXX=xx-clang++
@@ -37,6 +39,7 @@ fi
 HOST_PKGS=" \
     curl \
     build-base \
+    binutils \
     clang \
     lld \
     llvm \
@@ -133,6 +136,11 @@ make -C /tmp/ffmpeg -j$(nproc)
 
 log "Installing FFmpeg..."
 DESTDIR=/tmp/ffmpeg-install make -C /tmp/ffmpeg install
+sh "$SCRIPT_DIR/check-stack.sh" \
+    /tmp/ffmpeg-install/usr/bin/ffmpeg \
+    /tmp/ffmpeg-install/usr/bin/ffplay \
+    /tmp/ffmpeg-install/usr/bin/ffprobe \
+    /tmp/ffmpeg-install/usr/lib/lib*.so.*
 rm -r /tmp/ffmpeg-install/usr/lib/pkgconfig
 mkdir -p /tmp/ffmpeg-install/usr/share/licenses/ffmpeg
 cp /tmp/ffmpeg/COPYING.GPLv3 /tmp/ffmpeg-install/usr/share/licenses/ffmpeg/LICENSE
