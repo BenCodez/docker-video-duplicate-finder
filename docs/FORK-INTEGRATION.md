@@ -10,7 +10,7 @@ retained. No VDF.Web service is introduced.
 
 `Dockerfile` pins a full application commit in
 `VIDEO_DUPLICATE_FINDER_COMMIT_SHA`. The implementation pin is
-`351c9d06d0081ec81d52682dca8736a1b30ab0a7`, including scheduled scans,
+`e6d1bc15ed954e38540b013b966045d8bd5d52bb`, including scheduled scans,
 NFO favourite protection, selection profiles, persistent review decisions and
 safe cleanup. The commit is published on the application fork's
 `feature/safe-media-automation` branch. A branch name is deliberately rejected
@@ -29,7 +29,7 @@ and container tag contents mean this is not a promise of bit-identical layers.
 
 ```sh
 # The application commit must be available in the fork before the image build.
-APP_COMMIT=351c9d06d0081ec81d52682dca8736a1b30ab0a7
+APP_COMMIT=e6d1bc15ed954e38540b013b966045d8bd5d52bb
 docker buildx build --platform linux/amd64,linux/arm64 \
   --build-arg VIDEO_DUPLICATE_FINDER_COMMIT_SHA="$APP_COMMIT" \
   --build-arg DOCKER_IMAGE_VERSION=local-test \
@@ -197,6 +197,8 @@ its default-path, explicit-database-override and full source-revision metadata
 probes. All 16 startup/release-policy/smoke-probe regressions and 25 patched-application
 settings, scheduling and protection-persistence tests passed. Shell syntax,
 whitespace and actionlint 1.7.12 validation passed.
+An additional 23 shared cleanup-guard and 44 Web cleanup-safety checks passed
+against the same patched source, including manual protection on hardlink aliases.
 
 The patched application published successfully for both `linux-musl-x64` and
 `linux-musl-arm64`, with no warnings reported. The apphosts have the correct ELF
