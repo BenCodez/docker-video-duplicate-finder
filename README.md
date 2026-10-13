@@ -1,13 +1,10 @@
 # Docker container for Video Duplicate Finder
-[![Release](https://img.shields.io/github/release/jlesage/docker-video-duplicate-finder.svg?logo=github&style=for-the-badge)](https://github.com/jlesage/docker-video-duplicate-finder/releases/latest)
-[![Docker Image Size](https://img.shields.io/docker/image-size/jlesage/video-duplicate-finder/latest?logo=docker&style=for-the-badge)](https://hub.docker.com/r/jlesage/video-duplicate-finder/tags)
-[![Docker Pulls](https://img.shields.io/docker/pulls/jlesage/video-duplicate-finder?label=Pulls&logo=docker&style=for-the-badge)](https://hub.docker.com/r/jlesage/video-duplicate-finder)
-[![Docker Stars](https://img.shields.io/docker/stars/jlesage/video-duplicate-finder?label=Stars&logo=docker&style=for-the-badge)](https://hub.docker.com/r/jlesage/video-duplicate-finder)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/jlesage/docker-video-duplicate-finder/build-image.yml?logo=github&branch=master&style=for-the-badge)](https://github.com/jlesage/docker-video-duplicate-finder/actions/workflows/build-image.yml)
-[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg?style=for-the-badge)](https://paypal.me/JocelynLeSage)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/BenCodez/docker-video-duplicate-finder/build-image.yml?logo=github)](https://github.com/BenCodez/docker-video-duplicate-finder/actions/workflows/build-image.yml)
+
+Fork of [jlesage/docker-video-duplicate-finder](https://github.com/jlesage/docker-video-duplicate-finder), retaining the original browser/VNC interface. Read [fork build, testing, image replacement and rollback](docs/FORK-INTEGRATION.md) before switching an installation. Use an intentional tested GHCR tag or digest; this fork does not publish `latest` automatically.
 
 This project provides a lightweight and secure Docker container for
-[Video Duplicate Finder](https://github.com/0x90d/videoduplicatefinder).
+[Video Duplicate Finder](https://github.com/BenCodez/videoduplicatefinder).
 
 Access the application's full graphical interface directly from any modern web
 browser - no downloads, installs, or setup required on the client side - or
@@ -74,20 +71,21 @@ frame rate and even watermarked.
 > The Docker command provided in this quick start is an example, and parameters
 > should be adjusted to suit your needs.
 
-Launch the Video Duplicate Finder docker container with the following command:
+After validating a copied configuration, set a tested image tag and launch the container:
 
 ```shell
+export VDF_IMAGE='ghcr.io/bencodez/video-duplicate-finder:TESTED_TAG'
 docker run -d \
     --name=video-duplicate-finder \
     -p 5800:5800 \
-    -v /docker/appdata/video-duplicate-finder:/config:rw \
+    -v /docker/appdata/video-duplicate-finder-test:/config:rw \
     -v /home/user:/storage:rw \
-    jlesage/video-duplicate-finder
+    "$VDF_IMAGE"
 ```
 
 Where:
 
-  - `/docker/appdata/video-duplicate-finder`: Stores the application's configuration, state, logs, and any files requiring persistency.
+  - `/docker/appdata/video-duplicate-finder-test`: Stores the application's configuration, state, logs, and any files requiring persistency.
   - `/home/user`: Contains files from the host that need to be accessible to the application.
 
 Access the Video Duplicate Finder GUI by browsing to `http://your-host-ip:5800`.
@@ -101,7 +99,7 @@ docker run [-d] \
     [-e <VARIABLE_NAME>=<VALUE>]... \
     [-v <HOST_DIR>:<CONTAINER_DIR>[:PERMISSIONS]]... \
     [-p <HOST_PORT>:<CONTAINER_PORT>]... \
-    jlesage/video-duplicate-finder
+    "$VDF_IMAGE"
 ```
 
 | Parameter | Description |
@@ -253,94 +251,49 @@ included in this example.
 ```yaml
 services:
   video-duplicate-finder:
-    image: jlesage/video-duplicate-finder
+    image: ${VDF_IMAGE:?Set a tested GHCR tag or digest}
     ports:
       - "5800:5800"
     volumes:
-      - "/docker/appdata/video-duplicate-finder:/config:rw"
+      - "/docker/appdata/video-duplicate-finder-test:/config:rw"
       - "/home/user:/storage:rw"
 ```
 
 ## Docker Image Versioning and Tags
 
-Each release of a Docker image is versioned, and each version as its own image
-tag. Before October 2022, the versioning scheme followed
-[semantic versioning](https://semver.org).
+The fork publishes intentional version/test tags and commit tags to
+`ghcr.io/bencodez/video-duplicate-finder`. Commit tags include both container and
+application revisions: `sha-<container-commit-12>-<application-commit-12>`.
+Version-tag releases do not update `latest`; a separate explicit manual stable
+release can promote it. Pull requests and branch builds do not publish images.
 
-Since then, the versioning scheme has shifted to
-[calendar versioning](https://calver.org) with the format `YY.MM.SEQUENCE`,
-where:
-  - `YY` is the zero-padded year (relative to year 2000).
-  - `MM` is the zero-padded month.
-  - `SEQUENCE` is the incremental release number within the month (first release
-    is 1, second is 2, etc).
-
-View all available tags on [Docker Hub] or check the [Releases] page for version
-details.
-
-[Releases]: https://github.com/jlesage/docker-video-duplicate-finder/releases
-[Docker Hub]: https://hub.docker.com/r/jlesage/video-duplicate-finder/tags
+See [publication and supported architectures](docs/FORK-INTEGRATION.md#ci-and-publication).
+The supported CI targets are AMD64 and ARM64. The previously advertised ARMv6/v7
+images are not published by this fork until their newer native dependencies and
+complete image smoke have been validated.
 
 ## Docker Image Update
 
-The Docker image is regularly updated to incorporate new features, fix issues,
-or integrate newer versions of the containerized application. Several methods
-can be used to update the Docker image.
-
-If your system provides a built-in method for updating containers, this should
-be your primary approach.
-
-Alternatively, you can use [Watchtower], a container-based solution for
-automating Docker image updates. Watchtower seamlessly handles updates when a
-new image is available.
-
-To manually update the Docker image, follow these steps:
-
-  1. Fetch the latest image:
-```shell
-docker pull jlesage/video-duplicate-finder
-```
-
-  2. Stop the container:
-```shell
-docker stop video-duplicate-finder
-```
-
-  3. Remove the container:
-```shell
-docker rm video-duplicate-finder
-```
-
-  4. Recreate and start the container using the `docker run` command, with the
-     same parameters used during initial deployment.
-
-[Watchtower]: https://github.com/containrrr/watchtower
+Choose a tested immutable version or image digest, test it with a **copied**
+`/config` directory, and keep the original image/configuration for rollback.
+[Deployment examples and rollback steps](docs/FORK-INTEGRATION.md#test-using-a-copied-configuration)
+include a small image/config override that preserves existing port, storage,
+authentication and network mappings. No production configuration needs to be
+changed merely to test the fork.
 
 ### Synology
 
-For Synology NAS users, follow these steps to update a container image:
-
-  1.  Open the *Docker* application.
-  2.  Click *Registry* in the left pane.
-  3.  In the search bar, type the name of the container (`jlesage/video-duplicate-finder`).
-  4.  Select the image, click *Download*, and choose the `latest` tag.
-  5.  Wait for the download to complete. A notification will appear once done.
-  6.  Click *Container* in the left pane.
-  7.  Select your Video Duplicate Finder container.
-  8.  Stop it by clicking *Action* -> *Stop*.
-  9.  Clear the container by clicking *Action* -> *Reset* (or *Action* ->
-      *Clear* if you don't have the latest *Docker* application). This removes
-      the container while keeping its configuration.
-  10. Start the container again by clicking *Action* -> *Start*. **NOTE**:  The
-      container may temporarily disappear from the list while it is recreated.
+Use the same tested GHCR image tag/digest and a separate copied application-data
+directory in the Synology container configuration. Preserve all existing port,
+media mount, user/group and authentication settings. Keep the original image
+and original application-data directory for rollback.
 
 ### unRAID
 
-For unRAID users, update a container image with these steps:
-
-  1. Select the *Docker* tab.
-  2. Click the *Check for Updates* button at the bottom of the page.
-  3. Click the *apply update* link of the container to be updated.
+Set the repository to the tested `ghcr.io/bencodez/video-duplicate-finder` tag or
+digest and test against a copied appdata directory. Preserve the existing
+5800/5900 mappings, media mounts and environment settings. Retain the original
+repository reference and untouched appdata directory to roll back.
 
 ## User/Group IDs
 
@@ -857,6 +810,6 @@ argument to the `docker run` command.
 ## Support or Contact
 
 Having troubles with the container or have questions? Please
-[create a new issue](https://github.com/jlesage/docker-video-duplicate-finder/issues).
+[create a new issue](https://github.com/BenCodez/docker-video-duplicate-finder/issues).
 
-For other Dockerized applications, visit https://jlesage.github.io/docker-apps.
+The original container and base GUI infrastructure are by [Jocelyn Le Sage](https://jlesage.github.io/docker-apps). The application originates from [0x90d/videoduplicatefinder](https://github.com/0x90d/videoduplicatefinder).

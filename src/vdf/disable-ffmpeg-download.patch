@@ -1,21 +1,68 @@
-#
-# Make sure FFmpeg is not downloaded when not found.
-#
---- a/VDF.GUI/ViewModels/MainWindowVM.cs
-+++ b/VDF.GUI/ViewModels/MainWindowVM.cs
-@@ -1512,6 +1512,7 @@
- 				}
- 			}
+# Disable the shared GUI download owner: both scan startup and the manual
+# command go through this method. Keep every native/tool availability check.
+--- a/VDF.GUI/ViewModels/MainWindowVM_FfmpegDownloader.cs
++++ b/VDF.GUI/ViewModels/MainWindowVM_FfmpegDownloader.cs
+@@ -38,60 +38,9 @@
+ 			await DownloadSharedFfmpegAsync();
+ 		});
  
-+			/* Do not download FFmpeg automatically.
- 			if ((SettingsFile.Instance.UseNativeFfmpegBinding && !ScanEngine.NativeFFmpegExists) ||
- 				(!SettingsFile.Instance.UseNativeFfmpegBinding && !ScanEngine.FFmpegExists) ||
- 				!ScanEngine.FFprobeExists) {
-@@ -1531,6 +1532,7 @@
- 				await MessageBoxService.Show(GetRequiredFfmpegPackage(CoreUtils.CurrentFolder));
- 				return;
- 			}
-+			*/
- 			if (!ScanEngine.FFprobeExists) {
- 				if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
- 					await MessageBoxService.Show(App.Lang["Message.FFprobeMissingWithHint"]);
+-		async Task DownloadSharedFfmpegAsync() {
+-			if (IsFfmpegDownloadInProgress) return;
+-			IsFfmpegDownloadInProgress = true;
+-			IsBusy = true;
+-			IsBusyOverlayText = App.Lang["Message.FfmpegDownloadPreparing"];
+-			string? errorMessage = null;
+-			string? targetFolder = null;
+-			CancellationToken cancelToken = BeginCancelableBusyOperation();
+-
+-			try {
+-				var progress = new Progress<FfmpegDownloadProgress>(p => IsBusyOverlayText = p.Phase switch {
+-					FfmpegDownloadPhase.Verifying => App.Lang["Message.FfmpegDownloadVerifying"],
+-					FfmpegDownloadPhase.Extracting => App.Lang["Message.FfmpegDownloadExtracting"],
+-					_ => string.Format(
+-						CultureInfo.InvariantCulture,
+-						App.Lang["Message.FfmpegDownloadProgress"],
+-						p.DisplayName,
+-						Math.Round(p.BytesTotal > 0 ? p.BytesDone / (double)p.BytesTotal!.Value * 100 : 0, 1),
+-						DownloadUtils.FormatBytes(p.BytesDone),
+-						DownloadUtils.FormatBytes(p.BytesTotal)),
+-				});
+-				targetFolder = await FfmpegDownloader.DownloadAndInstallAsync(progress, cancelToken);
+-			}
+-			catch (OperationCanceledException) {
+-				// User pressed the overlay's Cancel button — the finally below restores
+-				// the idle state; returning skips the install-instructions message box.
+-				return;
+-			}
+-			catch (PlatformNotSupportedException) {
+-				errorMessage = App.Lang["Message.FfmpegDownloadUnsupported"];
+-			}
+-			catch (HttpRequestException ex) {
+-				errorMessage = string.Format(CultureInfo.InvariantCulture, App.Lang["Message.FfmpegDownloadFailed"], ex.Message);
+-			}
+-			catch (IOException ex) {
+-				errorMessage = string.Format(CultureInfo.InvariantCulture, App.Lang["Message.FfmpegDownloadIoFailed"], ex.Message);
+-			}
+-			catch (UnauthorizedAccessException ex) {
+-				errorMessage = string.Format(CultureInfo.InvariantCulture, App.Lang["Message.FfmpegDownloadAccessFailed"], ex.Message);
+-			}
+-			catch (Exception ex) {
+-				errorMessage = string.Format(CultureInfo.InvariantCulture, App.Lang["Message.FfmpegDownloadFailed"], ex.Message);
+-			}
+-			finally {
+-				EndCancelableBusyOperation();
+-				IsBusy = false;
+-				IsBusyOverlayText = string.Empty;
+-				IsFfmpegDownloadInProgress = false;
+-			}
+-
+-			bool ffmpegFound = FFToolsUtils.GetPath(FFToolsUtils.FFTool.FFmpeg) != null;
+-			bool ffprobeFound = FFToolsUtils.GetPath(FFToolsUtils.FFTool.FFProbe) != null;
+-			await MessageBoxService.Show(BuildFfmpegInstallInstructions(ffmpegFound, ffprobeFound, targetFolder, errorMessage));
+-		}
++		Task DownloadSharedFfmpegAsync() => MessageBoxService.Show(
++			"FFmpeg is supplied by this Docker image. Rebuild/update the image to change FFmpeg; " +
++			"desktop downloads cannot be used on Alpine Linux.");
+ 
+ 		static string BuildFfmpegInstallInstructions(bool ffmpegFound, bool ffprobeFound, string? targetFolder, string? errorMessage) {
+ 			var sb = new System.Text.StringBuilder();

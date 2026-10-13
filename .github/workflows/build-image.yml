@@ -1,165 +1,160 @@
-name: Docker image CI/CD
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-env:
-  DOCKER_IMAGE_NAME: jlesage/video-duplicate-finder
-  PLATFORMS: linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64/v8
+name: Fork image build and release
 
 on:
   push:
-    branches: '*'
-    tags:
-      - v[0-9][0-9].[0-9][0-9].[0-9]+
-      - v[0-9][0-9].[0-9][0-9].[0-9]+-pre.[0-9]+
+    branches: ['**']
+    tags: ['v[0-9]*']
   pull_request:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the tested image to the fork's GHCR package
+        type: boolean
+        default: false
+      image_tag:
+        description: Explicit version/test tag (latest is reserved)
+        type: string
+        default: test
+      application_commit:
+        description: Full application commit SHA (empty uses the Dockerfile pin)
+        type: string
+        default: ''
+      promote_latest:
+        description: Intentionally promote a stable vX.Y.Z release to latest
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  IMAGE: ghcr.io/bencodez/video-duplicate-finder
 
 jobs:
-  build:
-    name: Build image
-    runs-on: ubuntu-22.04
-
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      application_commit: ${{ steps.prepare.outputs.application_commit }}
+      image_tag: ${{ steps.prepare.outputs.image_tag }}
+      commit_tag: ${{ steps.prepare.outputs.commit_tag }}
+      publish: ${{ steps.prepare.outputs.publish }}
+      promote_latest: ${{ steps.prepare.outputs.promote_latest }}
     steps:
-      - name: Free disk space
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: false
+      - uses: actions/checkout@v6
+      - id: prepare
+        name: Validate source pin and intentional release inputs
+        env:
+          REQUESTED_COMMIT: ${{ inputs.application_commit }}
+          REQUESTED_TAG: ${{ inputs.image_tag }}
+          REQUESTED_PUBLISH: ${{ inputs.publish }}
+          REQUESTED_LATEST: ${{ inputs.promote_latest }}
+        run: .github/scripts/prepare-release.sh
 
-      - name: Prepare
-        id: prep
+  validate:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Shell and startup regression checks
         run: |
-          # Determine the Docker container version.
-          VERSION=unknown
-          if [[ $GITHUB_REF =~ refs/tags/* ]]; then
-            # Git tag pushed: use tag as the version.
-            VERSION=${GITHUB_REF#refs/tags/}
-          elif [[ $GITHUB_REF =~ refs/heads/* ]]; then
-            # Git commit pushed: use the commit SHA as the version.
-            VERSION=${GITHUB_SHA::8}
-          elif [[ $GITHUB_REF =~ refs/pull/* ]]; then
-            # Pull request: use PR number as the version.
-            VERSION=pr-${{ github.event.number }}
-          else
-            echo "::error::Unexpected GITHUB_REF: $GITHUB_REF"
-            exit 1
-          fi
-          # Determine the version to put in container label.
-          LABEL_VERSION=${VERSION}
-          if [[ $GITHUB_REF =~ refs/tags/* ]]; then
-            # Do not include the starting 'v' of the version.
-            LABEL_VERSION=${VERSION:1}
-          fi
-          # Determine the Docker container tags.
-          TAGS="${{ env.DOCKER_IMAGE_NAME }}:${VERSION}"
-          if [[ $GITHUB_REF =~ refs/tags/* ]]; then
-            TAGS="$TAGS,${{ env.DOCKER_IMAGE_NAME }}:latest"
-          fi
-          TAGS="$TAGS,$(echo $TAGS | tr ',' '\n' | sed 's|^|ghcr.io/|' | tr '\n' ',')"
-          # Determine the release type.
-          if [[ $GITHUB_REF =~ refs/tags/* ]]; then
-              IS_RELEASE=yes
-              if [[ $GITHUB_REF =~ -pre\.[0-9]+ ]]; then
-                  RELEASE_TYPE="pre"
-              else
-                  RELEASE_TYPE="standard"
-              fi
-          else
-              IS_RELEASE=no
-              RELEASE_TYPE="n/a"
-          fi
-          # Determine the Docker cache image.
-          name="${GITHUB_REPOSITORY#*/}"
-          name="${name#docker-}"
-          CACHE_IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER}/${name}:buildcache"
-          # Print results.
-          echo "::group::Results"
-          echo "Github reference: $GITHUB_REF"
-          echo "Release: $IS_RELEASE"
-          echo "Release type: $RELEASE_TYPE"
-          echo "Docker container version: $VERSION"
-          echo "Docker container version label: $LABEL_VERSION"
-          echo "Docker container tag(s): $TAGS"
-          echo "Docker cache image: $CACHE_IMAGE"
-          echo "::endgroup::"
-          # Export outputs.
-          echo "is_release=${IS_RELEASE}" >> $GITHUB_OUTPUT
-          echo "release_type=${RELEASE_TYPE}" >> $GITHUB_OUTPUT
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "label_version=${LABEL_VERSION}" >> $GITHUB_OUTPUT
-          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
-          echo "CACHE_IMAGE=${CACHE_IMAGE}" >> $GITHUB_ENV
-          #echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
-
-      - name: Setup QEMU
-        uses: docker/setup-qemu-action@v4
+          find rootfs src tests -type f -name '*.sh' -print | while IFS= read -r SCRIPT; do sh -n "$SCRIPT"; done
+          sh -n rootfs/usr/bin/xdg-open
+          bash -n .github/scripts/prepare-release.sh
+          python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Download the pinned application
+        env:
+          APP_COMMIT: ${{ needs.prepare.outputs.application_commit }}
+        run: |
+          curl --fail --show-error --location --retry 3 "https://github.com/BenCodez/videoduplicatefinder/archive/$APP_COMMIT.tar.gz" -o /tmp/vdf-source.tar.gz
+          mkdir -p /tmp/vdf-source
+          tar --no-same-owner -xzf /tmp/vdf-source.tar.gz --strip-components=1 -C /tmp/vdf-source
+      - uses: actions/setup-dotnet@v5
         with:
-          platforms: arm,arm64,ppc64le,mips64,s390x
+          dotnet-version: '10.0.401'
+      - name: Apply every patch and verify persistent application paths
+        env:
+          APP_COMMIT: ${{ needs.prepare.outputs.application_commit }}
+        run: tests/check-patches.sh /tmp/vdf-source "$APP_COMMIT"
 
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Login to DockerHub
-        if: ${{ steps.prep.outputs.is_release == 'yes' }}
-        uses: docker/login-action@v4
+  build_and_smoke:
+    needs: [prepare, validate]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-qemu-action@v4
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v4
+      - name: Build a local image without registry credentials
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          push: false
+          provenance: false
+          platforms: linux/${{ matrix.arch }}
+          tags: vdf-ci:${{ matrix.arch }}
+          build-args: |
+            VIDEO_DUPLICATE_FINDER_COMMIT_SHA=${{ needs.prepare.outputs.application_commit }}
+            DOCKER_IMAGE_VERSION=${{ needs.prepare.outputs.image_tag }}
+            DOCKER_IMAGE_REVISION=${{ github.sha }}
+          cache-from: type=gha,scope=vdf-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=vdf-${{ matrix.arch }}
+      - name: GUI, browser/VNC, persistent restart and scan without a browser
+        env:
+          PLATFORM: linux/${{ matrix.arch }}
+        run: tests/smoke-image.sh vdf-ci:${{ matrix.arch }}
+      - name: Export the exact tested image
+        if: needs.prepare.outputs.publish == 'true'
+        run: docker image save vdf-ci:${{ matrix.arch }} | gzip -1 > /tmp/vdf-${{ matrix.arch }}.tar.gz
+      - uses: actions/upload-artifact@v4
+        if: needs.prepare.outputs.publish == 'true'
+        with:
+          name: vdf-${{ matrix.arch }}
+          path: /tmp/vdf-${{ matrix.arch }}.tar.gz
+          retention-days: 1
 
-      - name: Login to GitHub Container Registry
+  publish:
+    needs: [prepare, build_and_smoke]
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: vdf-*
+          path: /tmp/vdf-images
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v4
+      - name: Authenticate only for the intentional fork publication
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          push: ${{ steps.prep.outputs.is_release == 'yes' }}
-          provenance: false
-          platforms: ${{ env.PLATFORMS }}
-          tags: ${{ steps.prep.outputs.tags }}
-          build-args: |
-            DOCKER_IMAGE_VERSION=${{ steps.prep.outputs.label_version }}
-          cache-from: type=registry,ref=${{ env.CACHE_IMAGE }}
-          cache-to: ${{ github.ref == 'refs/heads/master' && format('type=registry,ref={0},mode=max', env.CACHE_IMAGE) || '' }}
-
-      - name: Inspect
-        if: ${{ steps.prep.outputs.is_release == 'yes' }}
+      - name: Push tested architectures and create the multiarch manifest
+        env:
+          IMAGE_TAG: ${{ needs.prepare.outputs.image_tag }}
+          COMMIT_TAG: ${{ needs.prepare.outputs.commit_tag }}
+          PROMOTE_LATEST: ${{ needs.prepare.outputs.promote_latest }}
         run: |
-          docker buildx imagetools inspect ${{ env.DOCKER_IMAGE_NAME }}:${{ steps.prep.outputs.version }}
-
-      - name: Checkout
-        uses: actions/checkout@v6
-        if: ${{ steps.prep.outputs.release_type == 'standard' }}
-
-      - name: Dockerhub description
-        if: ${{ steps.prep.outputs.release_type == 'standard' }}
-        uses: peter-evans/dockerhub-description@v4
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
-          repository: ${{ env.DOCKER_IMAGE_NAME }}
-          readme-filepath: DOCKERHUB.md
-
-  notification:
-    name: Notification
-    needs: [ build ]
-    runs-on: ubuntu-22.04
-    if: ${{ always() && github.event_name != 'pull_request' }}
-
-    steps:
-      - name: Pushover notification
-        uses: desiderati/github-action-pushover@v1
-        with:
-          job-status: ${{ needs.build.result }}
-          pushover-api-token: ${{ secrets.PUSHOVER_API_TOKEN }}
-          pushover-user-key: ${{ secrets.PUSHOVER_USER_KEY }}
+          for ARCH in amd64 arm64; do
+            gzip -dc "/tmp/vdf-images/vdf-$ARCH.tar.gz" | docker image load
+            docker image tag "vdf-ci:$ARCH" "$IMAGE:$COMMIT_TAG-$ARCH"
+            docker image push "$IMAGE:$COMMIT_TAG-$ARCH"
+          done
+          TAGS=(--tag "$IMAGE:$IMAGE_TAG" --tag "$IMAGE:$COMMIT_TAG")
+          if [[ "$PROMOTE_LATEST" == true ]]; then TAGS+=(--tag "$IMAGE:latest"); fi
+          docker buildx imagetools create "${TAGS[@]}" "$IMAGE:$COMMIT_TAG-amd64" "$IMAGE:$COMMIT_TAG-arm64"
+          docker buildx imagetools inspect "$IMAGE:$COMMIT_TAG"

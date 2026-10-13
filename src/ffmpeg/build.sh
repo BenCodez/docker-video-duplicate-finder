@@ -19,9 +19,15 @@ log() {
 }
 
 FFMPEG_URL="${1:-}"
+FFMPEG_SHA256="${2:-}"
 
 if [ -z "$FFMPEG_URL" ]; then
     log "ERROR: FFmpeg URL missing."
+    exit 1
+fi
+if [ "${#FFMPEG_SHA256}" -ne 64 ] || \
+    ! printf '%s\n' "$FFMPEG_SHA256" | grep -Eq '^[0-9a-f]{64}$'; then
+    log "ERROR: A pinned FFmpeg source SHA256 is required."
     exit 1
 fi
 
@@ -78,7 +84,9 @@ xx-clang --setup-target-triple
 
 log "Downloading FFmpeg package..."
 mkdir /tmp/ffmpeg
-curl -# -L -f ${FFMPEG_URL} | tar xJ --strip 1 -C /tmp/ffmpeg
+curl --fail --show-error --location --retry 3 "$FFMPEG_URL" -o /tmp/ffmpeg-source.tar.xz
+printf '%s  %s\n' "$FFMPEG_SHA256" /tmp/ffmpeg-source.tar.xz | sha256sum -c -
+tar xJf /tmp/ffmpeg-source.tar.xz --strip 1 -C /tmp/ffmpeg
 
 #
 # Compile FFmpeg.
@@ -126,3 +134,7 @@ make -C /tmp/ffmpeg -j$(nproc)
 log "Installing FFmpeg..."
 DESTDIR=/tmp/ffmpeg-install make -C /tmp/ffmpeg install
 rm -r /tmp/ffmpeg-install/usr/lib/pkgconfig
+mkdir -p /tmp/ffmpeg-install/usr/share/licenses/ffmpeg
+cp /tmp/ffmpeg/COPYING.GPLv3 /tmp/ffmpeg-install/usr/share/licenses/ffmpeg/LICENSE
+cp /tmp/ffmpeg-source.tar.xz /tmp/ffmpeg-install/usr/share/licenses/ffmpeg/CorrespondingSource.tar.xz
+printf 'source=%s\nsha256=%s\n' "$FFMPEG_URL" "$FFMPEG_SHA256" > /tmp/ffmpeg-install/usr/share/licenses/ffmpeg/source-info.txt

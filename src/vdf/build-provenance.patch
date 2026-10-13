@@ -1,0 +1,24 @@
+# Source archives have no .git directory. Preserve the exact pinned application
+# commit in the existing assembly metadata/About display via a build property.
+--- a/Directory.Build.props
++++ b/Directory.Build.props
+@@ -16,7 +16,8 @@
+        archive). The date is day-granular so same-day, same-commit rebuilds stay
+        incremental (the generated AssemblyInfo doesn't churn). -->
+   <Target Name="EmbedBuildInfo" BeforeTargets="GetAssemblyAttributes">
+-    <Exec Command="git rev-parse --short HEAD"
++    <Exec Condition="'$(VdfSourceCommit)' == ''"
++          Command="git rev-parse --short HEAD"
+           ConsoleToMSBuild="true"
+           ContinueOnError="true"
+           StandardErrorImportance="Low"
+@@ -26,7 +27,8 @@
+       <Output TaskParameter="ExitCode" PropertyName="_VdfGitExitCode" />
+     </Exec>
+     <PropertyGroup>
+-      <_VdfGitCommit Condition="'$(_VdfGitExitCode)' != '0' or '$(_VdfGitCommit)' == ''">unknown</_VdfGitCommit>
++      <_VdfGitCommit Condition="'$(VdfSourceCommit)' == '' and ('$(_VdfGitExitCode)' != '0' or '$(_VdfGitCommit)' == '')">unknown</_VdfGitCommit>
++      <_VdfGitCommit Condition="'$(VdfSourceCommit)' != ''">$(VdfSourceCommit)</_VdfGitCommit>
+       <_VdfBuildDate>$([System.DateTime]::UtcNow.ToString('yyyy-MM-dd'))</_VdfBuildDate>
+     </PropertyGroup>
+     <ItemGroup>

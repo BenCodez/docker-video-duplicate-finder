@@ -1,4 +1,6 @@
-Force the "current folder" to be `/config`, instead of the folder where reside VDF.
+# Preserve the original flat /config layout for every app data folder,
+# including container mode and default fallbacks. Explicit database overrides
+# remain supported and must point at a persistent mount.
 --- a/VDF.Core/Utils/CoreUtils.cs
 +++ b/VDF.Core/Utils/CoreUtils.cs
 @@ -22,7 +22,7 @@
@@ -10,3 +12,66 @@ Force the "current folder" to be `/config`, instead of the folder where reside V
  		}
  
  		/// <summary>
+@@ -69,58 +69,12 @@
+ 			return StateFolder;
+ 		}
+ 
+-		static string ResolveStateFolder() {
+-			if (!IsRunningInContainer && IsCurrentFolderWritable)
+-				return CurrentFolder;
+-			return GetDefaultStateFolder();
+-		}
++		static string ResolveStateFolder() => "/config";
+ 
+-		static string ResolveSettingsFolder() {
+-			if (!IsRunningInContainer && IsCurrentFolderWritable)
+-				return CurrentFolder;
+-			return GetDefaultSettingsFolder();
+-		}
++		static string ResolveSettingsFolder() => "/config";
+ 
+-		public static string GetDefaultStateFolder() {
+-			string baseFolder;
+-			if (IsWindows) {
+-				baseFolder = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+-			}
+-			else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) {
+-				baseFolder = Path.Combine(
+-					Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+-					"Library", "Application Support");
+-			}
+-			else {
+-				baseFolder = Environment.GetEnvironmentVariable("XDG_STATE_HOME")
+-					?? Path.Combine(
+-						Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+-						".local", "state");
+-			}
+-			var folder = Path.Combine(baseFolder, "VDF");
+-			Directory.CreateDirectory(folder);
+-			return folder;
+-		}
++		public static string GetDefaultStateFolder() => "/config";
+ 
+-		public static string GetDefaultSettingsFolder() {
+-			string baseFolder;
+-			if (IsWindows) {
+-				baseFolder = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+-			}
+-			else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) {
+-				baseFolder = Path.Combine(
+-					Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+-					"Library", "Preferences");
+-			}
+-			else {
+-				baseFolder = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME")
+-					?? Path.Combine(
+-						Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+-						".config");
+-			}
+-			var folder = Path.Combine(baseFolder, "VDF");
+-			Directory.CreateDirectory(folder);
+-			return folder;
+-		}
++		public static string GetDefaultSettingsFolder() => "/config";
+ 	}
+ }
