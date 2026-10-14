@@ -100,6 +100,7 @@ assert results["version"] == 1
 assert {item["ItemInfo"]["Path"] for item in results["items"]} == set(decisions), "The backup did not preserve both GUI result rows"
 PY
 docker exec "$CONTAINER" pidof VDF.GUI >/dev/null
+docker exec "$CONTAINER" sh -c 'test "$(readlink /opt/vdf/libHarfBuzzSharp.so)" = /usr/lib/libharfbuzz.so.0 && test -s /opt/vdf/NativeFontRuntime.txt' >/dev/null
 test "$(wc -c < "$WORK_DIR/config/ScannedFiles.db")" -gt 20
 docker exec "$CONTAINER" /opt/vdf/VDF.GUI --help | grep -q -- '--settings'
 docker exec "$CONTAINER" sh -c 'command -v pcmanfm && command -v ffmpeg && command -v ffprobe && command -v ffplay && test -f /usr/lib/libonnxruntime.so.1' >/dev/null

@@ -68,6 +68,7 @@ RUN \
     [ "${TARGETARCH:-amd64}" = "amd64" ] && _onevpl=libvpl || _onevpl=; \
     add-pkg \
         gtk+3.0 \
+        harfbuzz \
         icu-libs \
         libice \
         libsm \
@@ -114,6 +115,16 @@ COPY LICENSE /usr/share/licenses/container/LICENSE
 COPY Dockerfile src/vdf/ /usr/share/vdf/container-build/
 COPY src/ffmpeg/build.sh /usr/share/vdf/container-build/ffmpeg-build.sh
 COPY src/ffmpeg/check-stack.sh /usr/share/vdf/container-build/check-stack.sh
+
+# Avoid mixed private HarfBuzz object layouts through musl symbol interposition.
+# Validate every C import of the pinned managed wrapper before selecting the
+# same native library that GTK/Pango use. binutils is a build-time check only.
+RUN add-pkg binutils && \
+    sh /usr/share/vdf/container-build/use-system-harfbuzz.sh && \
+    apk list --installed harfbuzz >> /opt/vdf/NativeFontRuntime.txt && \
+    mkdir -p /usr/share/licenses/harfbuzz && \
+    cp /usr/share/vdf/container-build/HARFBUZZ-COPYING /usr/share/licenses/harfbuzz/COPYING && \
+    del-pkg binutils
 
 # Set internal environment variables.
 RUN \

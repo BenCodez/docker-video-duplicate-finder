@@ -27,6 +27,18 @@ verified before extraction; changing FFmpeg versions requires changing that
 checksum too. Source and SDK pins make rebuilding the same application possible; mutable distro packages
 and container tag contents mean this is not a promise of bit-identical layers.
 
+GTK/Pango and HarfBuzzSharp use Alpine's single native `harfbuzz` library.
+The published managed HarfBuzzSharp 8.3.1.3 wrapper keeps its public C ABI;
+`libHarfBuzzSharp.so` points to `/usr/lib/libharfbuzz.so.0`. The build rejects a
+different managed wrapper version or any missing import from its complete
+319-symbol inventory. This prevents musl from interposing internal calls between
+the bundled HarfBuzz 8 and system HarfBuzz 13, which have different private object
+layouts. HarfBuzz documents its [stable public API/ABI](https://harfbuzz.github.io/install-harfbuzz.html).
+The 12 public wrapper struct layouts were also checked against Alpine 13.2.1
+headers on the supported LP64 targets. `/opt/vdf/NativeFontRuntime.txt` records
+the selected native package/version; the build checker, import inventory and
+HarfBuzz's COPYING notice are included with the image.
+
 ```sh
 # The application commit must be available in the fork before the image build.
 APP_COMMIT=e6d1bc15ed954e38540b013b966045d8bd5d52bb
@@ -194,7 +206,7 @@ Local checks used an isolated archive of the pinned application tree, never the
 application checkout or a user configuration. All nine patches applied with
 `--fuzz=0`; the actual patched `CoreUtils` compiled on SDK 10.0.401 and passed
 its default-path, explicit-database-override and full source-revision metadata
-probes. All 28 startup/release-policy/smoke-probe/ELF-stack regressions and 25 patched-application
+probes. All 33 startup/release-policy/smoke-probe/ELF-stack/font-ABI regressions and 25 patched-application
 settings, scheduling and protection-persistence tests passed. Shell syntax,
 whitespace and actionlint 1.7.12 validation passed.
 An additional 23 shared cleanup-guard and 44 Web cleanup-safety checks passed
@@ -242,13 +254,33 @@ the post-crash and pristine prelaunch synthetic configuration, each with a
 only the final pristine replay adds `SYS_PTRACE` and .NET JSON crash reporting.
 It also prints replay process state, logs, generated files and schedule status.
 The first copied-state replay container stayed running without producing a
-report; GUI/crash-helper liveness was not measured. This does not pass the
-original gate or identify the cause. It adds no
+report; GUI/crash-helper liveness was not measured. In diagnostic run
+`38491422404`, the AMD64 pristine replay produced a crash report in initial
+text layout at `HarfBuzzSharp.Font(Face)`, and the kernel identified an invalid
+pointer in musl's allocator metadata handling. A post-crash normal replay
+completed a scheduled scan, while a pristine normal replay reproduced SIGSEGV.
+ARM64's normal smoke also failed; its replays produced no JSON crash report.
+These diagnostics do not pass the original gate. The replay adds no
 production packages and never replaces the original smoke's failure status.
 The disposable replay makes the SDK's owner-executable `createdump` helper
 executable for the same unprivileged GUI user before starting the usual `/init`.
-Normal smoke containers retain their original capabilities. The GUI crash and
-complete runtime gates remain unresolved.
+Normal smoke containers retain their original capabilities.
+
+A minimal C reproduction using the actual Alpine musl and both native HarfBuzz
+libraries reproduced SIGSEGV during OpenType shaping when system 13 was loaded
+before bundled 8. Loading bundled 8 first or using only system 13 succeeded for
+1,000 shape/destroy iterations; the mixed case also changed the glyph count.
+The single-library packaging change passes the complete import guard and this
+native reproduction. A separate managed reproduction using the actual published
+HarfBuzzSharp 8.3.1.3 and self-contained musl .NET 10.0.12 runtime also exited 139
+at the first `new Font(Face)` with system 13 loaded before bundled 8. Its pinned
+font-table callback and release lifecycle match Avalonia's path. Replacing only
+the native library with the system-library symlink passed 20 font-create,
+Latin/Arabic/CJK-shaping, disposal and garbage-collection cycles, with consistent
+30-glyph/position results. Five regressions check actual ELF exports, missing imports,
+managed-version mismatch, absent/non-ELF libraries and incomplete inventories.
+The unchanged cold-start GUI/schedule/restart smoke remains required on both
+architectures; the new packaging change has not yet passed those image gates.
 
 ## Attribution and corresponding source
 
@@ -259,3 +291,6 @@ the exact patched application source at `/opt/vdf/CorrespondingSource.tar.gz`,
 its license at `/opt/vdf/licenses/VDF/LICENSE`, the container's license/build
 scripts under `/usr/share/licenses/container` and `/usr/share/vdf/container-build`,
 and the FFmpeg source/license under `/usr/share/licenses/ffmpeg`.
+Alpine's HarfBuzz runtime is installed as a distro package; its upstream
+13.2.1 COPYING notice is retained under `/usr/share/licenses/harfbuzz`, with the
+actual installed package version recorded in `NativeFontRuntime.txt`.
