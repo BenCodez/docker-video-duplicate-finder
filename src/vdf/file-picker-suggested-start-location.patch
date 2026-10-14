@@ -1,6 +1,6 @@
 --- a/VDF.GUI/ViewModels/MainWindowVM.cs
 +++ b/VDF.GUI/ViewModels/MainWindowVM.cs
-@@ -850,6 +850,7 @@
+@@ -931,6 +931,7 @@
  
  		async static void ExportDbToJson(JsonSerializerOptions options) {
  			var result = await Utils.PickerDialogUtils.SaveFilePicker(new FilePickerSaveOptions() {

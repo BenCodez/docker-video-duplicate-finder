@@ -1,9 +1,4 @@
-#
-# Set About window Owner in the constructor (same pattern as DatabaseViewer,
-# ChooseAlgoView, BlacklistManagerView). ShowDialog alone registers the child
-# as a modal dialog and disables the main window; under Openbox that shifts the
-# forced-maximized borderless main window in the Docker GUI environment.
-#
+# Preserve the About dialog owner under Openbox.
 --- a/VDF.GUI/Views/AboutWindow.xaml.cs
 +++ b/VDF.GUI/Views/AboutWindow.xaml.cs
 @@ -32,6 +32,7 @@

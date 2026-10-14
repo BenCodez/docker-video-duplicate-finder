@@ -1,0 +1,17 @@
+# A separate test project uses a copied config and read-only media by default.
+services:
+  video-duplicate-finder:
+    image: ${VDF_IMAGE:?Set VDF_IMAGE to a tested GHCR version or digest}
+    restart: unless-stopped
+    ports:
+      - "${VDF_WEB_PORT:-5801}:5800"
+      # Optional VNC, preserving the application's container port:
+      # - "5901:5900"
+    environment:
+      TZ: ${VDF_TZ:-Etc/UTC}
+      USER_ID: ${VDF_USER_ID:-1000}
+      GROUP_ID: ${VDF_GROUP_ID:-1000}
+      DARK_MODE: ${VDF_DARK_MODE:-0}
+    volumes:
+      - "${VDF_CONFIG_COPY:?Set the path to a COPIED config}:/config:rw"
+      - "${VDF_MEDIA_DIR:?Set a test media directory}:/storage:ro"

@@ -1,0 +1,8 @@
+# Merge with the existing Compose file. Ports, /storage, authentication, network,
+# clipboard/file-manager options and other environment settings are inherited.
+# Rename the service here if the existing Compose service has a different name.
+services:
+  video-duplicate-finder:
+    image: ${VDF_IMAGE:?Set an intentional tested image tag or digest}
+    volumes:
+      - "${VDF_CONFIG_COPY:?Set the copied config path}:/config:rw"

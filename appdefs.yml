@@ -19,9 +19,9 @@ app:
       image) files on hard disk based on similiarity. That means unlike other duplicate
       finders, this one does also finds duplicates which have a different resolution,
       frame rate and even watermarked.
-    url: https://github.com/0x90d/videoduplicatefinder
+    url: https://github.com/BenCodez/videoduplicatefinder
   unraid:
-    support_url: https://forums.unraid.net/topic/134636-support-video-duplicate-finder/
+    support_url: https://github.com/BenCodez/docker-video-duplicate-finder/issues
     category: "MediaApp:Video"
   documentation:
   changelog:
