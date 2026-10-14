@@ -114,13 +114,22 @@ case "$1" in
   run)
     case " $* " in
       *' --interactive '*) cat > "$MOCK_DOCKER_STDIN"; exec sh "$MOCK_DOCKER_STDIN" "$MOCK_MEDIA";;
-      *) exit 0;;
+      *)
+        for ARG do
+          case "$ARG" in */config:/config:rw)
+            ROOT="${ARG%/config:/config:rw}"
+            cmp "$ROOT/config/Settings.json" "$ROOT/pristine-config/Settings.json" || exit 97
+            cmp "$ROOT/config/ScannedFiles.db" "$ROOT/pristine-config/ScannedFiles.db" || exit 97
+            printf 'pristine fixture captured\\n' >> "$MOCK_TRACE";;
+          esac
+        done
+        exit 0;;
     esac
     ;;
   inspect)
     [ "$2" != -f ] || printf 'false\\n'
     exit 0;;
-  logs|rm|stop) exit 0;;
+  logs|rm|stop|exec) exit 0;;
   *) exit 99;;
 esac
 ''')
@@ -133,12 +142,15 @@ esac
         self.assertIn("Container exited before scheduled scan", result.stdout)
         trace = self.trace.read_text().splitlines()
         gui_runs = [line for line in trace if line.startswith("docker run -d ")]
-        self.assertEqual(len(gui_runs), 2)
-        self.assertNotIn("--cap-add", gui_runs[0])
-        self.assertIn("--cap-add=SYS_PTRACE", gui_runs[1])
-        self.assertIn("DOTNET_EnableCrashReportOnly=1", gui_runs[1])
-        self.assertIn("/diagnostic-config:/config:rw", gui_runs[1])
-        self.assertNotIn("--rm", gui_runs[1])
+        self.assertEqual(len(gui_runs), 4)
+        self.assertIn("pristine fixture captured", trace)
+        for run in gui_runs[:3]:
+            self.assertNotIn("--cap-add", run)
+            self.assertNotIn("DOTNET_EnableCrashReportOnly", run)
+        self.assertIn("--cap-add=SYS_PTRACE", gui_runs[3])
+        self.assertIn("DOTNET_EnableCrashReportOnly=1", gui_runs[3])
+        self.assertIn("/diagnostic-config-pristine-report:/config:rw", gui_runs[3])
+        self.assertNotIn("--rm", gui_runs[3])
 
 
 if __name__ == "__main__":

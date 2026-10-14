@@ -3,7 +3,16 @@ import json
 from pathlib import Path
 import sys
 
-reports = sorted(Path(sys.argv[1]).glob("gui-startup.*.crashreport.json"))
+directory = Path(sys.argv[1])
+print("Generated configuration files:", sorted(str(file.relative_to(directory)) for file in directory.rglob("*") if file.is_file())[:100])
+settings_file = directory / "Settings.json"
+if settings_file.is_file():
+    with settings_file.open() as stream:
+        settings = json.load(stream)
+    print("Replay settings/status:", json.dumps({field: settings.get(field) for field in
+          ("ThemeMode", "EnableScheduledScan", "ScheduledScanTime", "ScheduledLastStatus",
+           "ScheduledLastClaimedSlotUtc", "UseNativeFfmpegBinding", "HardwareAccelerationMode")}, sort_keys=True))
+reports = sorted(directory.glob("gui-startup.*.crashreport.json"))
 if not reports:
     print("No .NET crash report was produced; see container diagnostic logs.")
 for file in reports[:4]:

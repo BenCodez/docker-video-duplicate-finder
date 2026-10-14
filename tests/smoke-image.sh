@@ -16,7 +16,7 @@ cleanup() {
         if docker inspect "$CONTAINER" >/dev/null 2>&1; then
             # Only this failure-only replay grants ptrace. It cannot pass a gate.
             if docker stop "$CONTAINER" >/dev/null 2>&1; then
-                timeout 120 sh "$(dirname "$0")/diagnose-gui.sh" \
+                timeout 300 sh "$(dirname "$0")/diagnose-gui.sh" \
                     "$IMAGE" "$PLATFORM" "$WORK_DIR" "$CONTAINER" "$SMOKE_UID" "$SMOKE_GID" || true
             fi
         fi
@@ -58,6 +58,7 @@ with open(sys.argv[1], "w") as file: json.dump(settings, file)
 # first-run algorithm setup does not require an interactive browser connection.
 with open(sys.argv[2], "wb") as file: file.write(b"VDFDB002" + struct.pack("<iii", 3, 1, -1))
 PY
+cp -a "$WORK_DIR/config" "$WORK_DIR/pristine-config"
 
 start_container() {
     docker run -d --platform "$PLATFORM" --name "$CONTAINER" \

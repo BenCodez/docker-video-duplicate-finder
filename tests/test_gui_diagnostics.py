@@ -17,19 +17,30 @@ class GUIDiagnosticsTests(unittest.TestCase):
             settings = root / "config/Settings.json"
             settings.write_text('{"fixture":true}\n')
             (root / "media").mkdir()
+            (root / "pristine-config").mkdir()
+            (root / "pristine-config/Settings.json").write_text('{"pristine":true}\n')
             tools = root / "tools"
             tools.mkdir()
             docker = tools / "docker"
             docker.write_text('''#!/bin/sh
 printf '%s\\n' "$*" >> "$MOCK_TRACE"
 case "$1" in
-  run) printf 'changed by diagnostic replay\\n' > "$MOCK_ROOT/diagnostic-config/Settings.json";;
+  run)
+    for ARG do
+      case "$ARG" in */diagnostic-config-*:/config:rw)
+        printf '{"changed":true}\\n' > "${ARG%:/config:rw}/Settings.json";;
+      esac
+    done;;
   inspect) printf 'false\\n';;
-  logs|rm) :;;
+  logs|rm|exec) :;;
   *) exit 99;;
 esac
 ''')
             docker.chmod(0o755)
+            for name in ("sudo", "dmesg"):
+                executable = tools / name
+                executable.write_text('#!/bin/sh\nprintf "mock kernel diagnostic\\n"\n')
+                executable.chmod(0o755)
             trace = root / "trace"
             env = dict(os.environ, PATH=f"{tools}:{os.environ['PATH']}",
                        MOCK_TRACE=str(trace), MOCK_ROOT=str(root))
@@ -38,14 +49,23 @@ esac
                                     env=env, text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(settings.read_text(), '{"fixture":true}\n')
-            self.assertEqual((root / "diagnostic-config/Settings.json").read_text(),
-                             "changed by diagnostic replay\n")
+            self.assertEqual((root / "pristine-config/Settings.json").read_text(), '{"pristine":true}\n')
+            for scenario in ("post-crash", "pristine", "pristine-report"):
+                self.assertEqual((root / f"diagnostic-config-{scenario}/Settings.json").read_text(),
+                                 '{"changed":true}\n')
             calls = trace.read_text().splitlines()
-            self.assertIn("--platform linux/arm64", calls[0])
-            self.assertIn(f"{root}/media:/storage:ro", calls[0])
-            self.assertIn("--entrypoint /bin/sh", calls[0])
-            self.assertIn("chmod a+x /opt/vdf/createdump && exec /init", calls[0])
-            self.assertEqual(calls[-1], "rm -f test-container-diagnostic")
+            runs = [call for call in calls if call.startswith("run ")]
+            self.assertEqual(len(runs), 3)
+            for run in runs:
+                self.assertIn("--platform linux/arm64", run)
+                self.assertIn(f"{root}/media:/storage:ro", run)
+            for run in runs[:2]:
+                self.assertNotIn("--cap-add", run)
+                self.assertNotIn("DOTNET_DbgEnableMiniDump", run)
+                self.assertNotIn("--entrypoint", run)
+            self.assertIn("--entrypoint /bin/sh", runs[2])
+            self.assertIn("chmod a+x /opt/vdf/createdump && exec /init", runs[2])
+            self.assertEqual(calls[-1], "rm -f test-container-diagnostic-pristine-report")
 
     def test_report_prioritizes_crashed_threads_and_limits_printed_frames(self):
         with tempfile.TemporaryDirectory() as temp:

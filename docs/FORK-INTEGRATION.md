@@ -235,9 +235,15 @@ In CI run `38486657363`, both images verified every stack header and passed the
 unchanged FFV1 fixture with optimized code. This fixes the original native encode
 failure and supports the stack-overflow diagnosis. Both then reached desktop
 startup, where `VDF.GUI` exited with SIGSEGV before the scheduled scan.
-The full smoke remains failed. On failure only, the smoke now replays the same
-image with a copy of its synthetic configuration, a 90-second limit and
-`SYS_PTRACE` to collect a .NET native/managed JSON crash report. It adds no
+The full smoke remains failed. On failure only, the smoke now gathers available
+host kernel fault messages and replays the same image with separate copies of
+the post-crash and pristine prelaunch synthetic configuration, each with a
+90-second limit. The first two replays keep normal capabilities/environment;
+only the final pristine replay adds `SYS_PTRACE` and .NET JSON crash reporting.
+It also prints replay process state, logs, generated files and schedule status.
+The first copied-state replay container stayed running without producing a
+report; GUI/crash-helper liveness was not measured. This does not pass the
+original gate or identify the cause. It adds no
 production packages and never replaces the original smoke's failure status.
 The disposable replay makes the SDK's owner-executable `createdump` helper
 executable for the same unprivileged GUI user before starting the usual `/init`.
