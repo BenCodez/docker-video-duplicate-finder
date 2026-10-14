@@ -10,7 +10,7 @@ retained. No VDF.Web service is introduced.
 
 `Dockerfile` pins a full application commit in
 `VIDEO_DUPLICATE_FINDER_COMMIT_SHA`. The implementation pin is
-`e6d1bc15ed954e38540b013b966045d8bd5d52bb`, including scheduled scans,
+`f1e5ff22f8da80cb70dd82fe0afac868590a094a`, including scheduled scans,
 NFO favourite protection, selection profiles, persistent review decisions and
 safe cleanup. The commit is published on the application fork's
 `feature/safe-media-automation` branch. A branch name is deliberately rejected
@@ -41,7 +41,7 @@ HarfBuzz's COPYING notice are included with the image.
 
 ```sh
 # The application commit must be available in the fork before the image build.
-APP_COMMIT=e6d1bc15ed954e38540b013b966045d8bd5d52bb
+APP_COMMIT=f1e5ff22f8da80cb70dd82fe0afac868590a094a
 docker buildx build --platform linux/amd64,linux/arm64 \
   --build-arg VIDEO_DUPLICATE_FINDER_COMMIT_SHA="$APP_COMMIT" \
   --build-arg DOCKER_IMAGE_VERSION=local-test \
@@ -109,6 +109,13 @@ initialization marker and existing state/protection files prevent fresh defaults
 from replacing saved cleanup protections. Restore the settings file to resume.
 No new migration of the existing database is performed by container scripts;
 application-level schema migration and backup behavior remain owned by VDF.
+
+The fork's legacy-removal and quarantine journals now save schema version 2,
+including durable proof for refreshing a keeper's deliberate protection after
+an authorized rollback. The new application reads version 1 and migrates on
+save. Older binaries reject version 2 instead of interpreting it permissively.
+Preserve the **entire pre-upgrade configuration/state snapshot**, including both
+journals and their sidecars, when making the test copy.
 
 The scheduler belongs to the continuously running GUI process. Closing a browser
 or disconnecting VNC does not stop that process. The container must remain
@@ -186,7 +193,16 @@ docker compose -f compose.original.yml -f deploy/compose.image-swap.yml \
   up -d --no-deps --force-recreate video-duplicate-finder
 ```
 
-To roll back, reuse the recorded original image **and untouched original config**:
+Before rollback, stop/quiesce the newer GUI and preserve a complete copy of its
+current configuration/state and any quarantine destinations. Complete pending
+cleanup recovery with the newer image before switching versions. Keep that
+current-state copy even when restoring the pre-upgrade snapshot: it contains
+post-upgrade review decisions, protection changes and cleanup/recovery history
+that the older snapshot cannot contain.
+
+Validate the recorded original image **with the untouched pre-upgrade config
+and read-only media** before permitting any older-image cleanup. The image and
+state swap is then:
 
 ```sh
 export VDF_IMAGE="$ORIGINAL_IMAGE_DIGEST"
@@ -196,91 +212,55 @@ docker compose -f compose.original.yml -f deploy/compose.image-swap.yml \
 ```
 
 Do not point the old image at the test directory after the new application has
-written its state. Image rollback does not undo media cleanup; restore any
-intentionally quarantined test media before relying on an older application's
-database.
+written its state. Restore the full pre-upgrade configuration/state snapshot
+with the older image; replacing only `Settings.json` or the scan database leaves
+upgraded version-2 cleanup journals that the older binary must reject.
+The pre-upgrade snapshot cannot undo post-upgrade media mutations or decisions.
+Preserve and reconcile any new protections and cleanup results before allowing
+the older image and old state to authorize cleanup. Restore any intentionally
+quarantined test media through the newer application's verified recovery path
+before relying on an older application's database. Do not discard the copied
+current state or quarantine history when making that assessment.
 
-## Validation evidence and remaining gates
+## Validation gates
 
-Local checks used an isolated archive of the pinned application tree, never the
-application checkout or a user configuration. All nine patches applied with
-`--fuzz=0`; the actual patched `CoreUtils` compiled on SDK 10.0.401 and passed
-its default-path, explicit-database-override and full source-revision metadata
-probes. All 33 startup/release-policy/smoke-probe/ELF-stack/font-ABI regressions and 25 patched-application
-settings, scheduling and protection-persistence tests passed. Shell syntax,
-whitespace and actionlint 1.7.12 validation passed.
-An additional 23 shared cleanup-guard and 44 Web cleanup-safety checks passed
-against the same patched source, including manual protection on hardlink aliases.
+Every application-pin or container change requires all nine patches to apply
+with zero fuzz to an isolated copy of the exact pinned source. The persistence
+probe must compile that patched source with SDK 10.0.401 and verify `/config`
+defaults, explicit database overrides and the full source-revision metadata.
+The repository's Python regressions, shell syntax, whitespace and actionlint
+checks also form part of acceptance. The application stack requires its full
+serial solution build and six test suites, Windows CI, and a fresh independent
+review of the exact final changes. Scalar Linux media-test results do not
+substitute for optimized native container validation.
 
-The patched application published successfully for both `linux-musl-x64` and
-`linux-musl-arm64`, with no warnings reported. The apphosts have the correct ELF
-architecture and musl interpreter; their dependency metadata contains the
-correct RID and self-contained .NET 10.0.12 runtime. Both GUI assemblies embed
-the exact source commit. This verifies host compilation and packaging, not image
-execution; later application changes must be revalidated before release.
+Both `linux/amd64` and `linux/arm64` must pass the original normal image smoke
+on the same reviewed container source and exact application pin. It uses an
+optimized FFmpeg FFV1 fixture, a cold GUI launch, scheduled scan without a
+browser, NFO-protected selection, HTTP 5800, VNC 5900, dark/light interface checks
+and a persistent restart with the same settings, database, reviews and schedule
+claims. Media is synthetic and mounted read-only. Failure-only diagnostic
+replays preserve the original failure status and cannot satisfy these gates.
+The build also verifies source/SDK pins, ELF architecture, native dependencies,
+FFmpeg stack reservations, font imports, licenses and corresponding source.
 
-The local environment has no Docker/Podman/BuildKit engine.
-**Neither architecture's Docker build nor runtime smoke has been
-run locally.** CI contains those mandatory checks, including native FFmpeg,
-desktop process, HTTP 5800, VNC 5900, a scheduled scan without a browser, an
-NFO-protected favourite, automatic
-selection-only behavior and a restart using the same settings/database/review
-plan. Those feature assertions require the implementation pin.
-CI execution, real GUI rendering,
-clipboard/file-manager interaction, authentication/TLS and AI model inference
-still require an available image/engine. These gates must be completed before
-calling an image production-ready.
+Earlier trials exposed three distinct native/startup defects: FFV1 worker
+stack exhaustion under musl, incompatible bundled/system HarfBuzz libraries
+loaded into one process, and incorrect ARM64 directory-durability ABI flags.
+The build requests and checks a 2 MiB `PT_GNU_STACK` reservation for FFmpeg tools
+and libraries, retains optimized CPU code, and uses the single guarded system
+HarfBuzz library described above. The application pin must include the corrected
+ARM64 directory flags and report original startup failures before opening an
+owned error dialog. These fixes require the complete normal smoke on both
+architectures; a successful native probe alone is insufficient.
 
-The first CI execution built both architectures, but each runtime smoke exited
-with signal 11/status 139 in the initial FFmpeg fixture before GUI startup.
-The fixture now prints loader inputs, resolved binaries/dependencies and tool
-versions with shell tracing. A failed encode collects debug logs and an existing
-debugger's backtrace when available, then returns the original failure status
-even if the diagnostic retry succeeds. Both diagnostic images passed tool
-versions and dependency resolution with empty loader overrides, then crashed
-after FFV1 encoder/thread startup. FFV1 has stack arrays larger than musl's
-128 KiB default native-thread stack. The build now requests 2 MiB through
-`PT_GNU_STACK` for all FFmpeg tools and shared libraries, retaining optimized
-code, and fails unless every installed ELF header has that reservation.
-Actual linked executable/shared-library regressions exercise the header gate.
-In CI run `38486657363`, both images verified every stack header and passed the
-unchanged FFV1 fixture with optimized code. This fixes the original native encode
-failure and supports the stack-overflow diagnosis. Both then reached desktop
-startup, where `VDF.GUI` exited with SIGSEGV before the scheduled scan.
-The full smoke remains failed. On failure only, the smoke now gathers available
-host kernel fault messages and replays the same image with separate copies of
-the post-crash and pristine prelaunch synthetic configuration, each with a
-90-second limit. The first two replays keep normal capabilities/environment;
-only the final pristine replay adds `SYS_PTRACE` and .NET JSON crash reporting.
-It also prints replay process state, logs, generated files and schedule status.
-The first copied-state replay container stayed running without producing a
-report; GUI/crash-helper liveness was not measured. In diagnostic run
-`38491422404`, the AMD64 pristine replay produced a crash report in initial
-text layout at `HarfBuzzSharp.Font(Face)`, and the kernel identified an invalid
-pointer in musl's allocator metadata handling. A post-crash normal replay
-completed a scheduled scan, while a pristine normal replay reproduced SIGSEGV.
-ARM64's normal smoke also failed; its replays produced no JSON crash report.
-These diagnostics do not pass the original gate. The replay adds no
-production packages and never replaces the original smoke's failure status.
-The disposable replay makes the SDK's owner-executable `createdump` helper
-executable for the same unprivileged GUI user before starting the usual `/init`.
-Normal smoke containers retain their original capabilities.
-
-A minimal C reproduction using the actual Alpine musl and both native HarfBuzz
-libraries reproduced SIGSEGV during OpenType shaping when system 13 was loaded
-before bundled 8. Loading bundled 8 first or using only system 13 succeeded for
-1,000 shape/destroy iterations; the mixed case also changed the glyph count.
-The single-library packaging change passes the complete import guard and this
-native reproduction. A separate managed reproduction using the actual published
-HarfBuzzSharp 8.3.1.3 and self-contained musl .NET 10.0.12 runtime also exited 139
-at the first `new Font(Face)` with system 13 loaded before bundled 8. Its pinned
-font-table callback and release lifecycle match Avalonia's path. Replacing only
-the native library with the system-library symlink passed 20 font-create,
-Latin/Arabic/CJK-shaping, disposal and garbage-collection cycles, with consistent
-30-glyph/position results. Five regressions check actual ELF exports, missing imports,
-managed-version mismatch, absent/non-ELF libraries and incomplete inventories.
-The unchanged cold-start GUI/schedule/restart smoke remains required on both
-architectures; the new packaging change has not yet passed those image gates.
+Current execution results, exact commit IDs, test counts and CI links are
+recorded in the [container draft PR](https://github.com/BenCodez/docker-video-duplicate-finder/pull/1)
+and [application integration draft PR](https://github.com/BenCodez/videoduplicatefinder/pull/6).
+Passing build/smoke gates does not create a published image tag or authorize
+production replacement. Clipboard/file-manager behavior, configured
+authentication/TLS and optional AI-model inference still need validation for
+the intended installation using a copied configuration.
 
 ## Attribution and corresponding source
 
