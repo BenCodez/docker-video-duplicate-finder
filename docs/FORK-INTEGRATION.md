@@ -194,7 +194,7 @@ Local checks used an isolated archive of the pinned application tree, never the
 application checkout or a user configuration. All nine patches applied with
 `--fuzz=0`; the actual patched `CoreUtils` compiled on SDK 10.0.401 and passed
 its default-path, explicit-database-override and full source-revision metadata
-probes. All 25 startup/release-policy/smoke-probe/ELF-stack regressions and 25 patched-application
+probes. All 28 startup/release-policy/smoke-probe/ELF-stack regressions and 25 patched-application
 settings, scheduling and protection-persistence tests passed. Shell syntax,
 whitespace and actionlint 1.7.12 validation passed.
 An additional 23 shared cleanup-guard and 44 Web cleanup-safety checks passed
@@ -231,8 +231,18 @@ after FFV1 encoder/thread startup. FFV1 has stack arrays larger than musl's
 `PT_GNU_STACK` for all FFmpeg tools and shared libraries, retaining optimized
 code, and fails unless every installed ELF header has that reservation.
 Actual linked executable/shared-library regressions exercise the header gate.
-This is a stack-overflow hypothesis pending the next image run; the original
-encode and complete runtime smokes must pass before the crash is considered fixed.
+In CI run `38486657363`, both images verified every stack header and passed the
+unchanged FFV1 fixture with optimized code. This fixes the original native encode
+failure and supports the stack-overflow diagnosis. Both then reached desktop
+startup, where `VDF.GUI` exited with SIGSEGV before the scheduled scan.
+The full smoke remains failed. On failure only, the smoke now replays the same
+image with a copy of its synthetic configuration, a 90-second limit and
+`SYS_PTRACE` to collect a .NET native/managed JSON crash report. It adds no
+production packages and never replaces the original smoke's failure status.
+The disposable replay makes the SDK's owner-executable `createdump` helper
+executable for the same unprivileged GUI user before starting the usual `/init`.
+Normal smoke containers retain their original capabilities. The GUI crash and
+complete runtime gates remain unresolved.
 
 ## Attribution and corresponding source
 

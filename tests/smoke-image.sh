@@ -11,9 +11,19 @@ SMOKE_GID="$(id -g)"
 [ "$SMOKE_GID" -ne 0 ] || SMOKE_GID=1000
 cleanup() {
     result=$?
-    if [ "$result" -ne 0 ]; then docker logs "$CONTAINER" 2>/dev/null || true; fi
+    if [ "$result" -ne 0 ]; then
+        docker logs "$CONTAINER" 2>/dev/null || true
+        if docker inspect "$CONTAINER" >/dev/null 2>&1; then
+            # Only this failure-only replay grants ptrace. It cannot pass a gate.
+            if docker stop "$CONTAINER" >/dev/null 2>&1; then
+                timeout 120 sh "$(dirname "$0")/diagnose-gui.sh" \
+                    "$IMAGE" "$PLATFORM" "$WORK_DIR" "$CONTAINER" "$SMOKE_UID" "$SMOKE_GID" || true
+            fi
+        fi
+    fi
     docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
     rm -rf "$WORK_DIR"
+    exit "$result"
 }
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM

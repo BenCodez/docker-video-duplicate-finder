@@ -106,6 +106,40 @@ esac
         self.assertEqual(captured.read_bytes(), (REPO / "tests/prepare-fixture.sh").read_bytes())
         self.assertFalse(list(self.media.iterdir()))
 
+    def test_successful_gui_diagnostics_cannot_replace_the_original_smoke_failure(self):
+        docker = self.tools / "docker"
+        docker.write_text('''#!/bin/sh
+printf 'docker %s\\n' "$*" >> "$MOCK_TRACE"
+case "$1" in
+  run)
+    case " $* " in
+      *' --interactive '*) cat > "$MOCK_DOCKER_STDIN"; exec sh "$MOCK_DOCKER_STDIN" "$MOCK_MEDIA";;
+      *) exit 0;;
+    esac
+    ;;
+  inspect)
+    [ "$2" != -f ] || printf 'false\\n'
+    exit 0;;
+  logs|rm|stop) exit 0;;
+  *) exit 99;;
+esac
+''')
+        docker.chmod(0o755)
+        captured = self.root / "container-stdin"
+        env = dict(self.env, MOCK_DOCKER_STDIN=str(captured), MOCK_MEDIA=str(self.media))
+        result = subprocess.run(["sh", str(REPO / "tests/smoke-image.sh"), "test-image"],
+                                env=env, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("Container exited before scheduled scan", result.stdout)
+        trace = self.trace.read_text().splitlines()
+        gui_runs = [line for line in trace if line.startswith("docker run -d ")]
+        self.assertEqual(len(gui_runs), 2)
+        self.assertNotIn("--cap-add", gui_runs[0])
+        self.assertIn("--cap-add=SYS_PTRACE", gui_runs[1])
+        self.assertIn("DOTNET_EnableCrashReportOnly=1", gui_runs[1])
+        self.assertIn("/diagnostic-config:/config:rw", gui_runs[1])
+        self.assertNotIn("--rm", gui_runs[1])
+
 
 if __name__ == "__main__":
     unittest.main()
