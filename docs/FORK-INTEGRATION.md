@@ -10,7 +10,7 @@ retained. No VDF.Web service is introduced.
 
 `Dockerfile` pins a full application commit in
 `VIDEO_DUPLICATE_FINDER_COMMIT_SHA`. The implementation pin is
-`f1e5ff22f8da80cb70dd82fe0afac868590a094a`, including scheduled scans,
+`4f38cd9e0d2951362bec33296e5a2bfd7b956dcb`, including scheduled scans,
 NFO favourite protection, selection profiles, persistent review decisions and
 safe cleanup. The commit is published on the application fork's
 `feature/safe-media-automation` branch. A branch name is deliberately rejected
@@ -41,7 +41,7 @@ HarfBuzz's COPYING notice are included with the image.
 
 ```sh
 # The application commit must be available in the fork before the image build.
-APP_COMMIT=f1e5ff22f8da80cb70dd82fe0afac868590a094a
+APP_COMMIT=4f38cd9e0d2951362bec33296e5a2bfd7b956dcb
 docker buildx build --platform linux/amd64,linux/arm64 \
   --build-arg VIDEO_DUPLICATE_FINDER_COMMIT_SHA="$APP_COMMIT" \
   --build-arg DOCKER_IMAGE_VERSION=local-test \
@@ -110,10 +110,13 @@ from replacing saved cleanup protections. Restore the settings file to resume.
 No new migration of the existing database is performed by container scripts;
 application-level schema migration and backup behavior remain owned by VDF.
 
-The fork's legacy-removal and quarantine journals now save schema version 2,
-including durable proof for refreshing a keeper's deliberate protection after
-an authorized rollback. The new application reads version 1 and migrates on
-save. Older binaries reject version 2 instead of interpreting it permissively.
+The fork's legacy-removal journal saves schema version 2, including durable
+proof for refreshing deliberate protections after an authorized rollback.
+Quarantine history saves version 3, adding the exact restore-staging identity
+so an interrupted rename cannot accept an unrelated byte-identical destination.
+Safe version 1 legacy history and safe version 1/2 quarantine history migrate
+on save. Older binaries reject newer history instead of interpreting it
+permissively. Reviews, policy, plans and the scan database retain their schemas.
 Preserve the **entire pre-upgrade configuration/state snapshot**, including both
 journals and their sidecars, when making the test copy.
 
